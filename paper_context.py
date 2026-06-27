@@ -2383,6 +2383,60 @@ def _run_pattern_learning(ctx: PaperContext):
     return ctx.learned_patterns
 
 
+def _run_literature_learning(ctx: PaperContext):
+    """文献深度学习：逻辑链提取、段落结构分析、学术表达模式库"""
+    if not ctx.papers_read:
+        logger.info("无已读论文，跳过文献深度学习")
+        return None
+
+    from literature_learner import LiteratureLearner
+    from paper_reader import PaperReader
+
+    reader = PaperReader()
+    learner = LiteratureLearner()
+
+    all_learnings = []
+    for paper_info in ctx.papers_read[:10]:
+        path = paper_info.get('path', '')
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            content = reader.read(path, fetch_metadata=False)
+            if not content:
+                continue
+            full_text = '\n\n'.join(sec.text for sec in content.sections if sec.text)
+            if not full_text:
+                continue
+            learning = learner.learn_from_text(
+                full_text,
+                title=paper_info.get('title', ''),
+                language=ctx.language if hasattr(ctx, 'language') else 'zh'
+            )
+            all_learnings.append(learning)
+        except Exception as e:
+            logger.warning(f"文献深度学习失败 {path}: {e}")
+
+    # 汇总结果
+    result = {
+        'papers_learned': len(all_learnings),
+        'logic_chains': sum(len(l.logic_chains) for l in all_learnings),
+        'paragraph_structures': sum(len(l.paragraph_structures) for l in all_learnings),
+        'expression_patterns': sum(len(l.expression_patterns) for l in all_learnings),
+    }
+
+    # 存储学到的表达模式供写作使用
+    all_patterns = []
+    for learning in all_learnings:
+        for p in learning.expression_patterns:
+            all_patterns.append(p.to_dict() if hasattr(p, 'to_dict') else p)
+    ctx.learned_expression_patterns = all_patterns
+
+    logger.info(f"文献深度学习: {result['papers_learned']} 篇论文, "
+               f"{result['logic_chains']} 条逻辑链, "
+               f"{result['expression_patterns']} 个表达模式")
+    return result
+
+
 # ============================================================
 # 6. 新增模块函数 — 接入原孤立模块
 # ============================================================
@@ -4316,6 +4370,12 @@ MODULE_REGISTRY = {
         'provides': ['learned_patterns', 'learned_mechanisms'],
         'run': _run_pattern_learning,
         'description': '写作模式学习（从论文中提取句式/讨论结构/机制）',
+    },
+    'literature_learning': {
+        'needs': ['papers_read'],
+        'provides': ['learned_expression_patterns'],
+        'run': _run_literature_learning,
+        'description': '文献深度学习（逻辑链提取/段落结构分析/学术表达模式库）',
     },
     'load_data': {
         'needs': ['data_path'],

@@ -656,20 +656,40 @@ def read_local_pdf(file_path: str) -> PaperContent:
     """从本地PDF文件读取论文（强化版：使用高级解析提取元数据+参考文献）"""
     path = Path(file_path)
 
-    # 优先使用高级解析
+    # 优先使用增强PDF解析器（多引擎+三层清洗）
     advanced_result = None
     try:
-        from rag_system.ingestion.pdf_parser import parse_pdf_advanced
-        advanced_result = parse_pdf_advanced(file_path)
-        text = advanced_result["text"]
+        from enhanced_pdf_parser import EnhancedPDFParser
+        parser = EnhancedPDFParser()
+        enhanced = parser.parse(file_path)
+        if enhanced and enhanced.sections:
+            text = enhanced.full_text or ""
+            advanced_result = {
+                "text": text,
+                "title": enhanced.title or "",
+                "authors": enhanced.authors or [],
+                "doi": enhanced.doi or "",
+                "abstract": enhanced.sections.get("abstract", ""),
+                "references": enhanced.references or [],
+            }
+            logger.info(f"Enhanced PDF parser: {len(text)} chars, {len(enhanced.sections)} sections")
     except Exception as e:
-        logger.warning(f"Advanced PDF parse failed, falling back: {e}")
+        logger.debug(f"Enhanced PDF parser not available: {e}")
+
+    # 回退到原有高级解析
+    if not advanced_result:
         try:
-            from rag_system.ingestion.pdf_parser import parse_pdf
-            text = parse_pdf(file_path)
-        except Exception as e2:
-            logger.warning(f"PDF parse error: {e2}")
-            text = ""
+            from rag_system.ingestion.pdf_parser import parse_pdf_advanced
+            advanced_result = parse_pdf_advanced(file_path)
+            text = advanced_result["text"]
+        except Exception as e:
+            logger.warning(f"Advanced PDF parse failed, falling back: {e}")
+            try:
+                from rag_system.ingestion.pdf_parser import parse_pdf
+                text = parse_pdf(file_path)
+            except Exception as e2:
+                logger.warning(f"PDF parse error: {e2}")
+                text = ""
 
     if not text:
         return read_local_text(file_path)

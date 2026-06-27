@@ -73,6 +73,7 @@ def find_orphans(root_dir='.'):
         'scientific_analysis_agent',  # 科研分析Agent（被scientific_analysis步骤调用）
         'scientific_visualization_agent',  # 可视化Agent（被generate_figures步骤调用）
         'citation_support_bank',  # 引用支撑库（被citation_bank步骤调用）
+        'enhanced_pdf_parser',    # 增强PDF解析器（被paper_reader调用）
     }
 
     # 已在MODULE_REGISTRY中注册的模块（通过不同名称）
